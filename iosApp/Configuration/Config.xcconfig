@@ -1,0 +1,7 @@
+TEAM_ID=
+
+PRODUCT_NAME=NotificationApp
+PRODUCT_BUNDLE_IDENTIFIER=com.hazrat.learning.notificationapp.NotificationApp$(TEAM_ID)
+
+CURRENT_PROJECT_VERSION=1
+MARKETING_VERSION=1.0
