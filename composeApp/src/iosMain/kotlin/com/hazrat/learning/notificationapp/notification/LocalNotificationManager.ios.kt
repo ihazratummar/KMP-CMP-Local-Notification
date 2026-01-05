@@ -8,6 +8,7 @@ import platform.Foundation.NSNumber
 import platform.Foundation.NSURL
 import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenNotificationSettingsURLString
 import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
@@ -67,9 +68,25 @@ actual class LocalNotificationManager {
     }
 
     actual fun openAppSettings() {
-        val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString)
-        if (url != null && UIApplication.sharedApplication.canOpenURL(url)) {
-            UIApplication.sharedApplication.openURL(url, mapOf<Any?, Any?>(), null)
+        // Try notification settings first (iOS 15.4+)
+        val notificationSettingsUrl = NSURL.URLWithString(UIApplicationOpenNotificationSettingsURLString)
+
+        val urlToOpen = if (notificationSettingsUrl != null &&
+            UIApplication.sharedApplication.canOpenURL(notificationSettingsUrl)) {
+            notificationSettingsUrl
+        } else {
+            // Fallback to general app settings for older iOS versions
+            NSURL.URLWithString(UIApplicationOpenSettingsURLString)
+        }
+
+        urlToOpen?.let { url ->
+            UIApplication.sharedApplication.openURL(
+                url = url,
+                options = emptyMap<Any?, Any?>(),
+                completionHandler = { success ->
+                    println("Settings opened: $success")
+                }
+            )
         }
     }
 
@@ -146,7 +163,7 @@ actual class LocalNotificationManager {
 
         // Show after 1 second delay (notifications don't show when app is in foreground by default)
         val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(
-            timeInterval = 1.0, // 1 second delay
+            timeInterval = 5.0, // 5 second delay
             repeats = false
         )
 

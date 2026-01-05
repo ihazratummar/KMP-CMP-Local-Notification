@@ -15,8 +15,8 @@ fun initKoin(koinApplication: ((KoinApplication) -> Unit)?= null) {
     startKoin {
         koinApplication?.invoke(this)
         modules(
-            notificationModule,
-            platformNotificationModule()
+            platformNotificationModule(),
+            notificationModule
         )
     }
 }
