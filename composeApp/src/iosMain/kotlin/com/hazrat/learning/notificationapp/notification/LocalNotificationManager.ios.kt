@@ -3,9 +3,17 @@ package com.hazrat.learning.notificationapp.notification
 // The 'actual' keyword says: "Here's the iOS implementation"
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.suspendCancellableCoroutine
+import platform.Foundation.NSCalendar
+import platform.Foundation.NSCalendarUnitDay
+import platform.Foundation.NSCalendarUnitHour
+import platform.Foundation.NSCalendarUnitMinute
+import platform.Foundation.NSCalendarUnitMonth
+import platform.Foundation.NSCalendarUnitSecond
+import platform.Foundation.NSCalendarUnitYear
 import platform.Foundation.NSDate
 import platform.Foundation.NSNumber
 import platform.Foundation.NSURL
+import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeIntervalSince1970
 import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationOpenNotificationSettingsURLString
@@ -17,6 +25,7 @@ import platform.UserNotifications.UNAuthorizationStatusAuthorized
 import platform.UserNotifications.UNAuthorizationStatusDenied
 import platform.UserNotifications.UNAuthorizationStatusNotDetermined
 import platform.UserNotifications.UNAuthorizationStatusProvisional
+import platform.UserNotifications.UNCalendarNotificationTrigger
 import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotificationRequest
 import platform.UserNotifications.UNNotificationSound
@@ -69,10 +78,12 @@ actual class LocalNotificationManager {
 
     actual fun openAppSettings() {
         // Try notification settings first (iOS 15.4+)
-        val notificationSettingsUrl = NSURL.URLWithString(UIApplicationOpenNotificationSettingsURLString)
+        val notificationSettingsUrl =
+            NSURL.URLWithString(UIApplicationOpenNotificationSettingsURLString)
 
         val urlToOpen = if (notificationSettingsUrl != null &&
-            UIApplication.sharedApplication.canOpenURL(notificationSettingsUrl)) {
+            UIApplication.sharedApplication.canOpenURL(notificationSettingsUrl)
+        ) {
             notificationSettingsUrl
         } else {
             // Fallback to general app settings for older iOS versions
@@ -103,11 +114,13 @@ actual class LocalNotificationManager {
                         println("✅ iOS Permission already granted")
                         continuation.resume(true)
                     }
+
                     UNAuthorizationStatusDenied -> {
                         cachedPermissionState = false
                         println("❌ iOS Permission denied")
                         continuation.resume(false)
                     }
+
                     UNAuthorizationStatusNotDetermined -> {
                         // Request permission
                         val options = UNAuthorizationOptionAlert or
@@ -130,6 +143,7 @@ actual class LocalNotificationManager {
                             }
                         )
                     }
+
                     else -> {
                         cachedPermissionState = false
                         continuation.resume(false)
@@ -150,6 +164,55 @@ actual class LocalNotificationManager {
                 println("❌ Cannot show notification: Permission not granted")
             }
         }
+    }
+    // ... (existing code)
+
+    actual fun scheduleNotification(id: String, title: String, body: String, timestamp: Long) {
+        updatePermissionCache { granted ->
+            if (granted) {
+                // Convert timestamp (ms) to seconds
+                val seconds = timestamp / 1000.0
+                val date = NSDate.dateWithTimeIntervalSince1970(seconds)
+
+                val triggerDate = NSCalendar.currentCalendar.components(
+                    NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or
+                            NSCalendarUnitHour or NSCalendarUnitMinute or NSCalendarUnitSecond,
+                    fromDate = date
+                )
+
+                val trigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
+                    dateComponents = triggerDate,
+                    repeats = false
+                )
+
+                val content = UNMutableNotificationContent().apply {
+                    setTitle(title)
+                    setBody(body)
+                    setSound(UNNotificationSound.defaultSound)
+                }
+
+                val request = UNNotificationRequest.requestWithIdentifier(
+                    identifier = id,
+                    content = content,
+                    trigger = trigger
+                )
+
+                center.addNotificationRequest(request) { error ->
+                    if (error != null) {
+                        println("❌ Failed to schedule notification: ${error.localizedDescription}")
+                    } else {
+                        println("✅ Notification scheduled for $date")
+                    }
+                }
+            } else {
+                println("❌ Cannot schedule notification: Permission not granted")
+            }
+        }
+    }
+
+    actual fun cancelNotification(id: String) {
+        center.removePendingNotificationRequestsWithIdentifiers(listOf(id))
+        println("🗑 iOS Notification cancelled: $id")
     }
 
     private fun showNotificationInternal(title: String, body: String) {

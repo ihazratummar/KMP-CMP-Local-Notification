@@ -16,11 +16,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Button
@@ -35,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -53,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import com.hazrat.learning.notificationapp.domain.model.ScheduledNotification
 import com.hazrat.learning.notificationapp.presentation.NotificationViewModel
 import com.hazrat.learning.notificationapp.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
@@ -66,6 +72,7 @@ fun App() {
         NotificationScreen(viewModel)
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,23 +114,23 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
+        // Use a lazy column for scrollable content including the list
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            item {
                 // Permission Card
                 PermissionStatusCard(
                     isGranted = state.isPermissionGranted,
                     onToggle = { viewModel.togglePermission(it) },
                     isRequesting = state.isRequestingPermission
                 )
+            }
 
-                // Input Section
+            item {
+                 // Input Section
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
                         text = "Compose Notification",
@@ -147,20 +154,85 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
                         minLines = 3
                     )
                 }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Send Button
-                SendButton(
-                    onClick = viewModel::sendNotification,
-                    isEnabled = state.isPermissionGranted && state.title.isNotBlank() && state.body.isNotBlank()
-                )
-                
-                Spacer(modifier = Modifier.height(32.dp))
+            }
+            
+            item {
+                // Schedule Control
+                 Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha=0.3f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                         Text(
+                            text = "Schedule Delay: ${state.scheduleDelaySeconds} seconds",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Slider(
+                            value = state.scheduleDelaySeconds.toFloat(),
+                            onValueChange = { viewModel.onDelayChange(it.toInt()) },
+                            valueRange = 5f..60f,
+                            steps = 10
+                        )
+                    }
+                }
             }
 
-            // Success Animation Overlay
-            AnimatedVisibility(
+            item {
+                // Action Buttons
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                     Button(
+                        onClick = viewModel::sendNotification,
+                        enabled = state.isPermissionGranted && state.title.isNotBlank() && state.body.isNotBlank(),
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Send Now")
+                    }
+                    
+                    Button(
+                        onClick = viewModel::scheduleNotification,
+                        enabled = state.isPermissionGranted && state.title.isNotBlank() && state.body.isNotBlank(),
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Icon(Icons.Default.Schedule, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Schedule")
+                    }
+                }
+            }
+            
+            // Scheduled Items List
+            if (state.scheduledNotifications.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Scheduled Notifications",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                
+                items(state.scheduledNotifications) { item ->
+                    ScheduledItemCard(
+                        item = item,
+                        onDelete = { viewModel.cancelNotification(item.id) }
+                    )
+                }
+            }
+            
+            item {
+                 Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+        
+        // Success Animation Overlay (Still works on top of LazyColumn)
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+             AnimatedVisibility(
                 visible = state.showSuccessMessage,
                 enter = fadeIn() + slideInVertically(initialOffsetY = { -40 }),
                 exit = fadeOut(),
@@ -173,6 +245,61 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
         }
     }
 }
+
+@Composable
+fun ScheduledItemCard(
+    item: ScheduledNotification,
+    onDelete: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = item.body,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = item.formatScheduledTime(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Cancel",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 fun PermissionStatusCard(
