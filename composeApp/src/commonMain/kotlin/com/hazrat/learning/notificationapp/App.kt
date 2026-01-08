@@ -59,16 +59,37 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.hazrat.learning.notificationapp.domain.model.ScheduledNotification
+import com.hazrat.learning.notificationapp.presentation.MokoNotificationPermissionManager
 import com.hazrat.learning.notificationapp.presentation.NotificationViewModel
 import com.hazrat.learning.notificationapp.ui.theme.AppTheme
+import dev.icerock.moko.permissions.compose.BindEffect
+import dev.icerock.moko.permissions.compose.rememberPermissionsControllerFactory
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinExperimentalAPI
+import org.koin.core.parameter.parametersOf
 
 @OptIn(KoinExperimentalAPI::class)
 @Composable
 fun App() {
     AppTheme {
-        val viewModel = koinViewModel<NotificationViewModel>()
+
+        val mokoFactory = rememberPermissionsControllerFactory()
+        val controller = remember(mokoFactory) {
+            mokoFactory.createPermissionsController()
+        }
+
+        BindEffect(controller)
+
+        val viewModel = koinViewModel<NotificationViewModel>(
+            parameters = {
+                parametersOf(controller, MokoNotificationPermissionManager(controller))
+            }
+        )
+        
+        LaunchedEffect(Unit) {
+            viewModel.refreshPermissionState()
+        }
+
         NotificationScreen(viewModel)
     }
 }

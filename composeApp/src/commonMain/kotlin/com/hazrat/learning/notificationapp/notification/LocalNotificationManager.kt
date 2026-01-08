@@ -8,12 +8,6 @@ package com.hazrat.learning.notificationapp.notification
  
 expect class LocalNotificationManager {
 
-    fun hasPermission() : Boolean
-
-    suspend fun requestPermission() : Boolean
-
-    fun openAppSettings()
-
     fun showNotification(title: String, body : String)
 
     fun scheduleNotification(id: String, title: String, body: String, timestamp: Long)

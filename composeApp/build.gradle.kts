@@ -50,6 +50,10 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
             implementation(libs.kotlinx.datetime)
             implementation(libs.material.icons.extended)
+
+            implementation(libs.moko.permissions)
+            implementation(libs.moko.permissions.compose)
+            implementation(libs.moko.permissions.notifications)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

@@ -13,24 +13,9 @@ class NotificationRepositoryImpl(
     // In-memory storage for demonstration (Replace with Room/DataStore for production)
     private val scheduledItems = mutableListOf<ScheduledNotification>()
 
-    override suspend fun checkPermission(): Boolean {
-        return localNotificationManager.hasPermission()
-    }
-
-    override suspend fun requestPermission(): Result<Boolean> {
-        return try {
-            val result = localNotificationManager.requestPermission()
-            Result.success(result)
-        } catch (e: Exception) {
-            Result.failure(NotificationError.SystemError(e.message))
-        }
-    }
 
     override suspend fun sendNotification(title: String, body: String): Result<Unit> {
         return try {
-            if (!localNotificationManager.hasPermission()) {
-                return Result.failure(NotificationError.PermissionDenied)
-            }
             localNotificationManager.showNotification(title, body)
             Result.success(Unit)
         } catch (e: Exception) {
@@ -40,10 +25,6 @@ class NotificationRepositoryImpl(
 
     override suspend fun scheduleNotification(item: ScheduledNotification): Result<Unit> {
          return try {
-            if (!localNotificationManager.hasPermission()) {
-                return Result.failure(NotificationError.PermissionDenied)
-            }
-            // Add to local list
             scheduledItems.add(item)
             // Schedule in system
             localNotificationManager.scheduleNotification(item.id, item.title, item.body, item.scheduledTime)
@@ -67,7 +48,4 @@ class NotificationRepositoryImpl(
         return Result.success(scheduledItems.toList())
     }
 
-    override fun openAppSettings() {
-        localNotificationManager.openAppSettings()
-    }
 }

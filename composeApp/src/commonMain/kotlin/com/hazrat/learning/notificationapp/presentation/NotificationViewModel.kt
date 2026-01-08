@@ -7,9 +7,12 @@ import com.hazrat.learning.notificationapp.domain.model.NotificationError
 import com.hazrat.learning.notificationapp.domain.model.ScheduledNotification
 import com.hazrat.learning.notificationapp.domain.usecase.CancelNotificationUseCase
 import com.hazrat.learning.notificationapp.domain.usecase.GetScheduledNotificationsUseCase
-import com.hazrat.learning.notificationapp.domain.usecase.ManagePermissionUseCase
 import com.hazrat.learning.notificationapp.domain.usecase.ScheduleNotificationUseCase
 import com.hazrat.learning.notificationapp.domain.usecase.SendNotificationUseCase
+import com.hazrat.learning.notificationapp.notification.LocalNotificationManager
+import dev.icerock.moko.permissions.Permission
+import dev.icerock.moko.permissions.PermissionsController
+import dev.icerock.moko.permissions.notifications.REMOTE_NOTIFICATION
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,34 +36,27 @@ data class NotificationUiState(
 
 class NotificationViewModel(
     private val sendNotificationUseCase: SendNotificationUseCase,
-    private val managePermissionUseCase: ManagePermissionUseCase,
     private val scheduleNotificationUseCase: ScheduleNotificationUseCase,
     private val cancelNotificationUseCase: CancelNotificationUseCase,
-    private val getScheduledNotificationsUseCase: GetScheduledNotificationsUseCase
+    private val getScheduledNotificationsUseCase: GetScheduledNotificationsUseCase,
+    private val permissionManager: NotificationPermissionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NotificationUiState())
     val uiState: StateFlow<NotificationUiState> = _uiState.asStateFlow()
 
     init {
-        startPermissionPolling()
         loadScheduledNotifications()
+        refreshPermissionState()
     }
 
-    private fun startPermissionPolling() {
+    fun refreshPermissionState() {
         viewModelScope.launch {
-            while (isActive) {
-                checkPermissionStatus()
-                delay(1000) // Poll every second
-            }
+            val granted = permissionManager.isGranted(permission = Permission.REMOTE_NOTIFICATION)
+            _uiState.update { it.copy(isPermissionGranted = granted) }
         }
     }
 
-    private suspend fun checkPermissionStatus() {
-        val granted = managePermissionUseCase.checkPermission()
-        _uiState.update { it.copy(isPermissionGranted = granted) }
-    }
-    
     private fun loadScheduledNotifications() {
         viewModelScope.launch {
              getScheduledNotificationsUseCase()
@@ -77,7 +73,7 @@ class NotificationViewModel(
     fun onBodyChange(newBody: String) {
         _uiState.update { it.copy(body = newBody) }
     }
-    
+
     fun onDelayChange(seconds: Int) {
          _uiState.update { it.copy(scheduleDelaySeconds = seconds) }
     }
@@ -86,42 +82,33 @@ class NotificationViewModel(
         if (shouldEnable) {
             requestPermission()
         } else {
-            managePermissionUseCase.openSettings()
+            openSettings()
         }
     }
 
-    private fun requestPermission() {
+    fun requestPermission() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRequestingPermission = true) }
-            
-            managePermissionUseCase.requestPermission()
-                .onSuccess { granted ->
-                     _uiState.update { 
-                        it.copy(
-                            isPermissionGranted = granted,
-                            isRequestingPermission = false,
-                            errorMessage = if (!granted) "Permission denied. Please enable from settings." else null
-                        ) 
-                    }
-                }
-                .onFailure { error ->
-                    _uiState.update { 
-                        it.copy(
-                            isRequestingPermission = false,
-                            errorMessage = "Failed to request permission: ${error.message}"
-                        ) 
-                    }
-                }
+
+            val granted = permissionManager.request(permission = Permission.REMOTE_NOTIFICATION)
+
+            _uiState.update {
+                it.copy(
+                    isPermissionGranted = granted,
+                    isRequestingPermission = false,
+                    errorMessage = if (granted) null else "Permission denied"
+                )
+            }
         }
     }
-    
+
     fun openSettings() {
-        managePermissionUseCase.openSettings()
+        permissionManager.openSettings()
     }
 
     fun sendNotification() {
         val currentState = _uiState.value
-        
+
         viewModelScope.launch {
             sendNotificationUseCase(currentState.title, currentState.body)
                 .onSuccess {
@@ -131,11 +118,11 @@ class NotificationViewModel(
                 .onFailure { error -> handleError(error) }
         }
     }
-    
+
     fun scheduleNotification() {
         val currentState = _uiState.value
         val scheduledTime = Clock.System.now().toEpochMilliseconds() + (currentState.scheduleDelaySeconds * 1000)
-        
+
         viewModelScope.launch {
             scheduleNotificationUseCase(
                 title = currentState.title,
@@ -148,7 +135,7 @@ class NotificationViewModel(
             }.onFailure { error -> handleError(error) }
         }
     }
-    
+
     fun cancelNotification(id: String) {
         viewModelScope.launch {
             cancelNotificationUseCase(id)
@@ -176,7 +163,7 @@ class NotificationViewModel(
             _uiState.update { it.copy(showSuccessMessage = false) }
         }
     }
-    
+
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
     }

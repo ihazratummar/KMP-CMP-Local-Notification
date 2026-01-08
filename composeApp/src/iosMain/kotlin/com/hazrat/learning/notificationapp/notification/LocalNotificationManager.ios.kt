@@ -48,13 +48,6 @@ actual class LocalNotificationManager {
         // Update cache on initialization
         updatePermissionCacheSync()
     }
-
-    // Actual implementation for iOS
-    actual fun hasPermission(): Boolean {
-        // Return cached state if available
-        return cachedPermissionState ?: false
-    }
-
     // Synchronous cache update (called from init)
     private fun updatePermissionCacheSync() {
         center.getNotificationSettingsWithCompletionHandler { settings ->
@@ -75,84 +68,6 @@ actual class LocalNotificationManager {
             completion(granted)
         }
     }
-
-    actual fun openAppSettings() {
-        // Try notification settings first (iOS 15.4+)
-        val notificationSettingsUrl =
-            NSURL.URLWithString(UIApplicationOpenNotificationSettingsURLString)
-
-        val urlToOpen = if (notificationSettingsUrl != null &&
-            UIApplication.sharedApplication.canOpenURL(notificationSettingsUrl)
-        ) {
-            notificationSettingsUrl
-        } else {
-            // Fallback to general app settings for older iOS versions
-            NSURL.URLWithString(UIApplicationOpenSettingsURLString)
-        }
-
-        urlToOpen?.let { url ->
-            UIApplication.sharedApplication.openURL(
-                url = url,
-                options = emptyMap<Any?, Any?>(),
-                completionHandler = { success ->
-                    println("Settings opened: $success")
-                }
-            )
-        }
-    }
-
-    actual suspend fun requestPermission(): Boolean {
-        return suspendCancellableCoroutine { continuation ->
-            // First check current status
-            center.getNotificationSettingsWithCompletionHandler { settings ->
-                val currentStatus = settings?.authorizationStatus
-
-                when (currentStatus) {
-                    UNAuthorizationStatusAuthorized,
-                    UNAuthorizationStatusProvisional -> {
-                        cachedPermissionState = true
-                        println("✅ iOS Permission already granted")
-                        continuation.resume(true)
-                    }
-
-                    UNAuthorizationStatusDenied -> {
-                        cachedPermissionState = false
-                        println("❌ iOS Permission denied")
-                        continuation.resume(false)
-                    }
-
-                    UNAuthorizationStatusNotDetermined -> {
-                        // Request permission
-                        val options = UNAuthorizationOptionAlert or
-                                UNAuthorizationOptionSound or
-                                UNAuthorizationOptionBadge
-
-                        println("🔔 Requesting iOS notification permission...")
-                        center.requestAuthorizationWithOptions(
-                            options = options,
-                            completionHandler = { granted, error ->
-                                if (error != null) {
-                                    println("❌ iOS Permission error: ${error.localizedDescription}")
-                                    cachedPermissionState = false
-                                    continuation.resume(false)
-                                } else {
-                                    cachedPermissionState = granted
-                                    println("✅ iOS Permission result: $granted")
-                                    continuation.resume(granted)
-                                }
-                            }
-                        )
-                    }
-
-                    else -> {
-                        cachedPermissionState = false
-                        continuation.resume(false)
-                    }
-                }
-            }
-        }
-    }
-
     actual fun showNotification(title: String, body: String) {
         println("📱 iOS showNotification called: $title")
 

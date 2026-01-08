@@ -18,10 +18,6 @@ class ScheduleNotificationUseCase(
             return Result.failure(NotificationError.InvalidContent) // Should use a better error like "PastTime"
         }
 
-        if (!repository.checkPermission()) {
-            return Result.failure(NotificationError.PermissionDenied)
-        }
-
         val id = timestamp.toString() // Simple ID generation strategy
         val notification = ScheduledNotification(
             id = id,
